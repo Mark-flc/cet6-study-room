@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>六级练习室 · 听力、翻译、写作</title>
+<meta name="description" content="把六级练习变成每天能完成的小事。原创听力训练、翻译逐句对照、作文限时练习，以及可追溯的历年真题来源。">
+<meta name="theme-color" content="#172d50">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23172d50'/%3E%3Ctext x='20' y='29' text-anchor='middle' font-family='Arial' font-weight='bold' font-size='28' fill='%23dcfa77'%3E6%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到练习内容</a>
+<div class="app-shell">
+<aside class="sidebar">
+ <a class="brand" href="#listening"><span class="brand-mark">6<span>↗</span></span><span>六级练习室<small>CET6 STUDY ROOM</small></span></a>
+ <p class="nav-label">每天，向前一点</p>
+ <nav aria-label="学习导航" id="nav">
+  <a href="#papers" class="nav-item" data-page="papers"><span class="nav-icon">▧</span>近五年真题<span class="nav-en">NEW</span></a>
+  <a href="#listening" class="nav-item active" data-page="listening"><span class="nav-icon">◉</span>听力训练<span class="nav-en">01</span></a>
+  <a href="#translation" class="nav-item" data-page="translation"><span class="nav-icon">文</span>翻译练习<span class="nav-en">02</span></a>
+  <a href="#writing" class="nav-item" data-page="writing"><span class="nav-icon">✎</span>作文工坊<span class="nav-en">03</span></a>
+  <div class="nav-divider"></div>
+  <a href="#resources" class="nav-item" data-page="resources"><span class="nav-icon">▤</span>真题与资料</a>
+  <a href="#tips" class="nav-item" data-page="tips"><span class="nav-icon">✦</span>做题方法</a>
+  <a href="#review" class="nav-item" data-page="review"><span class="nav-icon">↺</span>我的复习</a>
+ </nav>
+ <div class="side-note"><span class="tiny-label">A LITTLE, EVERY DAY.</span><p>听懂一句，<br>就离目标更近一步。</p><span class="note-line"></span><small>练习记录保存在此浏览器</small></div>
+ <span class="sidebar-foot">专注听力 · 翻译 · 写作</span>
+</aside>
+<div class="workspace">
+ <header class="topbar"><span>你的英语，正在进步。<span class="topbar-detail">从一次专注练习开始</span></span><div class="saved-indicator" id="save-status">本机学习记录</div></header>
+ <main id="main" tabindex="-1">
+  <section class="page-heading"><div><div class="eyebrow">LISTENING / 01</div><h1>把「听过」变成「听懂」。</h1><p>先听、再答、最后复盘。一次专注一个小目标。</p></div><div class="heading-stamp">CET<span>6</span><small>PRACTICE DAILY</small></div></section>
+  <div class="module-tabs"><button class="chip active">全部训练</button><button class="chip">长对话</button><button class="chip">听力篇章</button><button class="chip">讲座与讲话</button></div>
+  <div class="study-layout"><section class="study-card"><div class="lesson-top"><span class="pill blue">原创专项练习</span><span>01 / LISTENING</span></div><h2>重新安排小组讨论</h2><p class="muted">训练重点：听出计划变化与转折后的信息</p><div class="audio-deck"><div><span class="tiny-label">LISTEN CLOSELY</span><h3>先听一遍，抓住关键信息。</h3><p>先不要看原文，留意 but 和 instead。</p></div><button class="play-circle" aria-label="播放示例" onclick="if('speechSynthesis' in window){let u=new SpeechSynthesisUtterance('We planned to meet in the library this afternoon, but all the rooms are booked. Let us discuss the project online instead.');u.lang='en-US';speechSynthesis.cancel();speechSynthesis.speak(u)}">▶</button></div><div class="question"><span class="question-number">01</span><h3>Where will the group discuss the project?</h3><div class="answer-grid"><button class="answer-option">A <span>In the library.</span></button><button class="answer-option">B <span>Online.</span></button></div></div><p class="small muted">示例为原创内容 · 语音为合成朗读</p></section><aside class="right-rail"><div class="rail-card"><div class="eyebrow">YOUR NEXT STEP</div><h3>今天从听力开始</h3><p>完成一组训练，再跟读你没听清的句子。</p><div class="rail-step"><b>01</b><span>不看原文听一遍</span></div><div class="rail-step"><b>02</b><span>作答并定位依据</span></div><div class="rail-step"><b>03</b><span>跟读与复述</span></div></div><div class="rail-tip"><span>✦ 练习提醒</span><p>选项里出现原词，不等于答案正确。留意同义替换和转折。</p></div></aside></div>
+ </main>
+ <footer>六级练习室<span>原创训练与真题来源分别标注 · 非考试官方平台</span></footer>
+</div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="./content.js"></script><script src="./papers.js"></script><script src="./exams-ui.js"></script><script src="./app.js"></script>
+</body></html>
