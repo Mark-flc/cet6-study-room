@@ -18,3 +18,8 @@
 @media(max-width:650px){.exam-work-panel{padding:17px}.exam-work-tabs{gap:4px}.exam-work-tabs .chip{padding:7px 12px}.objective-score{gap:9px}.objective-breakdown b{font-size:15px}}
 
 .objective-shared{font-size:12px;background:#f2f6fc;border-radius:8px;padding:12px;margin:12px 0}.objective-shared .text-link{border:0;background:transparent;padding:0;margin-top:8px;font-size:12px;text-align:left}
+
+/* Reading method filters and practice guidance. */
+.tip-card-meta{display:flex;align-items:center;justify-content:space-between;gap:12px}.tip-card-meta .pill{font-size:11px;flex-shrink:0}.reading-method-intro{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin-bottom:20px;display:flex;align-items:center;gap:26px}.reading-method-intro>div{min-width:0}.reading-method-intro h2{font-size:22px;margin-bottom:10px}.reading-method-intro p{font-size:14px;color:var(--muted)}.reading-method-intro p.small{font-size:12px;margin-top:10px}.reading-method-intro .text-link{font-size:12px;display:inline-block;margin-top:9px}.reading-method-intro>.button{flex-shrink:0;font-size:13px}.reading-method-filters{align-items:center;flex-wrap:wrap;gap:8px}.reading-method-filters>span{margin-left:auto}.reading-review-tip{margin-top:23px}
+@media(max-width:940px){.reading-method-intro{flex-direction:column;align-items:flex-start;gap:17px}.reading-method-intro>.button{align-self:flex-start}}
+@media(max-width:650px){.reading-method-intro{padding:20px}.reading-method-intro h2{font-size:20px}.reading-method-filters>span{margin-left:0}}
