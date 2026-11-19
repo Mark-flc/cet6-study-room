@@ -42,6 +42,7 @@
 
       const reader = this.reader = {
         source: sourceUrl(this.dataset.src),
+        backup: sourceUrl(this.dataset.backupSrc),
         page: Math.max(1, Number.parseInt(this.dataset.page, 10) || 1),
         zoom: 1,
         revision: 0,
@@ -99,23 +100,36 @@
       reader.loading?.destroy().catch(() => {});
     }
 
+    async downloadPdf(reader) {
+      const controller = reader.download = new AbortController();
+      const deadline = setTimeout(() => controller.abort(), 65000);
+      const read = async url => {
+        const response = await fetch(url.href, { credentials: 'omit', signal: controller.signal });
+        if (!response.ok) throw new Error('PDF download failed');
+        const data = await response.arrayBuffer();
+        if (new TextDecoder().decode(data.slice(0, 5)) !== '%PDF-') throw new Error('Invalid PDF');
+        return data;
+      };
+      let backupTimer;
+      try {
+        const requests = [read(reader.source)];
+        if (reader.backup) {
+          const startBackup = new Promise(resolve => { backupTimer = setTimeout(resolve, 7500); });
+          requests.push(startBackup.then(() => read(reader.backup)));
+        }
+        return await Promise.any(requests);
+      } finally {
+        clearTimeout(backupTimer);
+        clearTimeout(deadline);
+        controller.abort();
+      }
+    }
+
     async loadDocument(reader) {
       try {
         const pdfjs = await pdfLibrary();
         if (this.reader !== reader) return;
-        reader.download = new AbortController();
-        const deadline = setTimeout(() => reader.download.abort(), 65000);
-        let data;
-        try {
-          const response = await fetch(reader.source.href, {
-            credentials: 'omit',
-            signal: reader.download.signal
-          });
-          if (!response.ok) throw new Error('PDF download failed');
-          data = await response.arrayBuffer();
-        } finally {
-          clearTimeout(deadline);
-        }
+        const data = await this.downloadPdf(reader);
         if (this.reader !== reader) return;
         reader.status.textContent = '正在显示卷面…';
         reader.loading = pdfjs.getDocument({
