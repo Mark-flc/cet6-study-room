@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-function setup(){const ctx={window:{},console};vm.createContext(ctx);for(const name of ['papers.js','answer-keys.js','objective.js','exams-ui.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),ctx);return ctx;}
+function setup(){const ctx={window:{},console};vm.createContext(ctx);for(const name of ['papers.js','answer-keys.js','objective.js','paired-papers.js','exams-ui.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),ctx);return ctx;}
 const plain=x=>JSON.parse(JSON.stringify(x));
 test('all 36 source-matched papers have complete valid keys, including shared sections',()=>{const {window:w}=setup();let count=0;assert.equal(w.CET6_PAPERS.papers.length,36);for(const p of w.CET6_PAPERS.papers){for(const mode of ['listening','reading']){const parts=w.CET6_OBJECTIVE.sections(p.id,mode);for(const s of parts){assert.ok(s.verified,`${p.id} ${s.id}`);assert.ok(s.key.sources.length);if(s.key.sharedFrom)assert.deepEqual(plain(s.answers),plain(w.CET6_KEYS.papers[s.key.sharedFrom].sections[s.id].answers));}const answers=Object.assign({},...parts.map(s=>s.answers));const g=w.CET6_OBJECTIVE.grade(p.id,mode,answers);assert.equal(g.percent,100);assert.equal(g.total,mode==='listening'?25:(['cet6-2026-06-3','cet6-2023-12-2'].includes(p.id)?29:30));count+=g.total;}}assert.equal(count,1978);});
 test('wrong and missing answers remain in the denominator',()=>{const {window:w}=setup(),o=w.CET6_OBJECTIVE,id='cet6-2025-12-3';const g=o.grade(id,'reading',{26:'A',36:'R',46:'B',99:'A'});assert.equal(g.correct,1);assert.equal(g.wrong,2);assert.equal(g.blank,27);assert.equal(g.total,30);assert.equal(g.percent,3);});
@@ -40,4 +40,62 @@ test('source outage leaves a same-session backup and the original answer card av
   mod.handleClick({dataset: {action: 'exam-document', value: 'sources'}});
   assert.ok(!mod.render().includes('<iframe'));
   assert.equal(saved.paperWork['cet6-2022-09-3'].listening[1], 'B');
+});
+
+test('each paired edition maps every question and option to its verified reference key', () => {
+  const {window: w} = setup();
+  const objective = w.CET6_OBJECTIVE;
+  for (const [id, modes] of Object.entries(w.CET6_PAIRED_PAPERS)) {
+    for (const [mode, pair] of Object.entries(modes)) {
+      assert.equal(pair.key, objective.signature(id, mode));
+      const expected = [];
+      for (const group of objective.sections(id, mode)) {
+        const numbers = [];
+        for (const n of group.numbers) {
+          const [source, order] = pair.questions?.[n] || [n, group.options.join('')];
+          assert.deepEqual([...order].sort(), [...group.options].sort(), `${id} Q${n}`);
+          numbers.push(source);
+          expected[source] = order[group.options.indexOf(group.answers[n])];
+        }
+        assert.deepEqual(numbers.sort((a, b) => a - b), Array.from(group.numbers));
+      }
+      assert.equal(expected.join(''), pair.answers, `${id} ${mode}`);
+    }
+  }
+});
+
+test('paired answers and results use displayed letters while saving the original choices', () => {
+  const ctx = setup(), {window: w} = ctx, id = 'cet6-2023-03-2';
+  ctx.document = {querySelector: () => null, querySelectorAll: () => []};
+  const saved = {};
+  const mod = w.createExamsModule({getSaved: () => saved, save: () => {}, toast: () => {}, esc: String, redraw: () => {}});
+  const click = (action, value, number) => mod.handleClick({dataset: {action, value, number}});
+  assert.ok(mod.resume(id));
+  assert.doesNotMatch(mod.render(), /id="paired-paper-reader"/);
+  click('exam-document', 'paired');
+  let html = mod.render();
+  assert.match(html, /2023_03_1\/test\.pdf" data-page="1"/);
+  assert.match(html, /2023_03_1\/listening\.mp3/);
+  assert.match(html, /data-number="1" data-value="A" aria-label="第 1 题选 B"/);
+  click('exam-answer', 'A', '1');
+  click('exam-confirm-submit');
+  assert.equal(saved.paperWork[id].listening[1], 'A');
+  assert.match(mod.render(), /aria-label="第 1 题选 B" aria-pressed="true"/);
+  assert.equal(w.CET6_OBJECTIVE.grade(id, 'listening', saved.paperWork[id].listening).correct, 1);
+
+  click('exam-tab', 'reading');
+  html = mod.render();
+  assert.match(html, /2023_03_1\/test\.pdf" data-page="3"/);
+  assert.match(html, /data-number="51" data-value="C" aria-label="第 46 题选 A"/);
+  click('exam-answer', 'C', '51');
+  click('exam-confirm-submit');
+  assert.equal(saved.paperWork[id].reading[51], 'C');
+  assert.equal(w.CET6_OBJECTIVE.grade(id, 'reading', saved.paperWork[id].reading).correct, 1);
+
+  click('exam-document', 'sources');
+  assert.match(mod.render(), /aria-label="第 51 题选 C" aria-pressed="true"/);
+  assert.doesNotMatch(mod.render(), /id="paired-paper-reader"/);
+  mod.resume('cet6-2026-06-1');
+  click('exam-document', 'paired');
+  assert.doesNotMatch(mod.render(), /id="paired-paper-reader"/);
 });
