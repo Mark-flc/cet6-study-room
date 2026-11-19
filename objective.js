@@ -16,7 +16,8 @@ window.CET6_OBJECTIVE = (() => {
       const numbers=Array.from({length:d.end-d.start+1},(_,i)=>d.start+i);
       const answers={};
       for(const n of numbers)if(options.includes(key?.answers?.[n]))answers[n]=key.answers[n];
-      return {...d,options,numbers,answers,key,verified:Object.keys(answers).length===numbers.length};
+      const excluded=numbers.filter(n=>typeof key?.excluded?.[n]?.reason==='string');
+      return {...d,options,numbers,answers,key,excluded,verified:Object.keys(answers).length===numbers.length};
     });
   }
   function sanitize(id,mode,raw) {
@@ -27,14 +28,14 @@ window.CET6_OBJECTIVE = (() => {
     return out;
   }
   function signature(id,mode) {
-    return sections(id,mode).map(s=>s.id+':'+(s.verified?s.numbers.map(n=>s.answers[n]).join(''):'unverified')).join('|');
+    return sections(id,mode).map(s=>s.id+':'+(s.verified?s.numbers.map(n=>s.excluded.includes(n)?'-':s.answers[n]).join(''):'unverified')).join('|');
   }
   function grade(id,mode,raw) {
     const answers=sanitize(id,mode,raw),rows=[],groups=[];
     for(const s of sections(id,mode)) {
-      const current=s.numbers.map(number=>({number,chosen:answers[number]||'',answer:s.verified?s.answers[number]:'',status:!s.verified?'ungraded':!answers[number]?'blank':answers[number]===s.answers[number]?'correct':'wrong'}));
+      const current=s.numbers.map(number=>({number,chosen:answers[number]||'',answer:s.verified&&!s.excluded.includes(number)?s.answers[number]:'',status:!s.verified||s.excluded.includes(number)?'ungraded':!answers[number]?'blank':answers[number]===s.answers[number]?'correct':'wrong'}));
       rows.push(...current);
-      groups.push({id:s.id,label:s.label,total:s.numbers.length,graded:s.verified?s.numbers.length:0,correct:current.filter(r=>r.status==='correct').length});
+      groups.push({id:s.id,label:s.label,total:s.numbers.length,graded:current.filter(r=>r.status!=='ungraded').length,correct:current.filter(r=>r.status==='correct').length});
     }
     const total=rows.filter(r=>r.status!=='ungraded').length;
     const correct=rows.filter(r=>r.status==='correct').length;
