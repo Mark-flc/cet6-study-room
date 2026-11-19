@@ -3,21 +3,65 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw})=>{
   let pendingSubmit=false,sectionSource=null,undoDraft=null;
   const available=(p,mode)=>O.sections(p.id,mode).some(s=>s.verified)||(mode==='listening'?p.hasListening:!p.partial);
   const initialTab=p=>available(p,'listening')?'listening':available(p,'reading')?'reading':'translation';
-  let year='全部',selectedId=null,tab='listening',search='',showAnswers=false,audioView=false;
+  let year='全部',selectedId=null,tab='listening',search='',documentView='sources';
   const $=s=>document.querySelector(s),words=t=>(String(t).match(/[A-Za-z]+(?:['’][A-Za-z]+)*(?:-[A-Za-z]+)*/g)||[]).length;
   function state(id){const s=getSaved();s.paperWork??={};s.paperWork[id]=O.mergeWork(id,s.paperWork[id],{});return s.paperWork[id];}
   const selected=()=>papers.find(p=>p.id===selectedId);
   function link(url,label,cls='button secondary'){return url?`<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`:'';}
-  function catalog(){const years=['全部',...new Set(papers.map(p=>String(p.year)))].sort((a,b)=>a==='全部'?-1:b==='全部'?1:Number(b)-Number(a));const filtered=papers.filter(p=>(year==='全部'||String(p.year)===year)&&(!search||`${p.title} ${p.sessionLabel} ${(p.topics?.translation||[]).join(' ')} ${(p.topics?.writing||[]).join(' ')}`.toLowerCase().includes(search.toLowerCase())));const sessions=[...new Set(filtered.map(p=>p.sessionId))];return `<section class="page-heading"><div><div class="eyebrow">PAST PAPERS / 2021–2026</div><h1>近五年真题，按考期练。</h1><p>选择考期和套卷，一边看原卷，一边完成听力、阅读答题与写译练习。</p></div><div class="heading-stamp">CET<span>6</span><small>PAST PAPERS</small></div></section><div class="paper-stats"><span><b>${papers.length}</b> 个套卷条目</span><span><b>${new Set(papers.map(p=>p.sessionId)).size}</b> 个考期</span><span><b>${papers.filter(p=>p.pdfUrl).length}</b> 份原卷 PDF</span><span>原来源核验 <b class="date">${esc(window.CET6_KEYS.updatedAt)}</b></span></div><div class="paper-intro"><p><b>时间范围：2021 年 12 月—2026 年 6 月。</b>包含期间查到的延期考期。原卷由公开来源直接提供，按来源套号区分；答案与听力按相应原卷核对。</p><p>听力与阅读支持自动判分、错题核对；成绩与作答保存在本机。看原卷和听原音需要联网。</p></div><div class="resource-tools"><label class="search-box"><span>⌕</span><input id="exam-search" type="search" aria-label="搜索真题" placeholder="搜索考期、套卷或话题" value="${esc(search)}"></label></div><div class="module-tabs">${years.map(y=>`<button class="chip ${year===y?'active':''}" data-action="exam-year" data-value="${y}">${y==='全部'?'全部考期':y+' 年'}</button>`).join('')}</div><div id="exam-catalog-results">${catalogRows(filtered,sessions)}</div><p class="small muted source-foot">更新核验以来源页面实际提供的材料为准；不把原创模拟题冒充真题，不宣称各来源套号一一对应。</p>`;}
+  function backupPapers(p){
+    const session=p.sessionId.replace('-','_');
+    const postponed=['2022-09','2023-03'].includes(p.sessionId);
+    const sets=postponed?[1]:[1,2,3];
+    const online=sets.map(n=>link(`https://www.guojiya.cn/exam/cet6_${session}_${n}`,`过级鸭第 ${n} 套`));
+    const cettong='https://www.cettong.cn/library/cet6';
+    if(postponed)online.push(link(`${cettong}/${session}_1`,'CET通第 1 套 PDF 和录音'),link(`${cettong}/${session}_2-3`,'CET通第 2–3 套补充资料'));
+    else if(p.year<=2025)online.push(link(cettong,'CET通 PDF 和录音目录'));
+    return online.join('');
+  }
+  function paperSources(p){
+    const source=sectionSource||p;
+    const url=source.previewUrl||source.htmlUrl||source.sourceUrl;
+    const showOriginal=documentView==='original';
+    return `<section class="paper-document" aria-label="真题资料">
+      <div class="paper-reader-note">
+        <h3>真题题文</h3>
+        <p>原站打不开时，可在备用站练习 ${esc(p.sessionLabel)} 真题。</p>
+        <div class="paper-source-actions" role="group" aria-label="同考期备用真题">${backupPapers(p)}</div>
+        <p>各站的套号、题序和选项可能不同。请在备用站完成答题与核对。使用本站答题卡时，请对照原站版本。</p>
+        <details class="disclosure"${showOriginal?' open':''}>
+          <summary>原站题文、PDF 与解析</summary>
+          <div class="paper-source-actions">
+            <button class="button secondary" data-action="exam-document" data-value="${showOriginal?'sources':'original'}">${showOriginal?'收起原站预览':'加载原站预览'}</button>
+            ${link(url,'打开原站题文')}${link(source.pdfUrl,'原卷 PDF')}${link(source.answerUrl,'参考答案 PDF')}
+          </div>
+          ${sectionSource?`<p>当前预览 ${esc(source.title)} 的共用题文。</p>`:''}
+        </details>
+      </div>
+      ${showOriginal&&url?`<iframe id="paper-frame" src="${esc(url)}" title="${esc(source.title)}原站题文" referrerpolicy="no-referrer" loading="lazy"></iframe>`:''}
+      <div class="paper-reader-note"><b>资料说明</b><p>${esc(p.note)}</p><span>${esc(p.coverage)}</span>${p.sources?.length?`<details class="disclosure"><summary>其他来源与核对材料</summary>${p.sources.map(x=>`<p>${link(x.url,esc(x.title),'text-link')}<br>${esc(x.note||'')}</p>`).join('')}</details>`:''}</div>
+    </section>`;
+  }
+  function listeningSource(p){
+    const shared=papers.find(x=>x.id===O.bank(p.id)?.sections?.listening?.sharedFrom);
+    const audioPaper=p.audioUrl?p:shared;
+    const supportsHls=typeof window.Audio==='function'&&new window.Audio().canPlayType('application/vnd.apple.mpegurl');
+    return `<section class="real-audio"><h3>本卷听力</h3>
+      ${shared?`<p>本部分与 ${esc(shared.title)} 共用听力。</p>`:''}
+      ${audioPaper?.audioUrl&&supportsHls?`<audio id="real-audio" controls preload="none" aria-label="本卷听力原音" src="${esc(audioPaper.audioUrl)}"></audio>`:''}
+      ${audioPaper?.audioUrl?link(audioPaper.audioUrl,'原音地址（支持 HLS 的播放器）','text-link'):''}
+      ${link(audioPaper?.audioPageUrl,'原站播放器','text-link')}
+      <p>原音打不开时，可在真题题文区打开同考期备用卷，按备用卷的录音和选项作答。</p>
+    </section>`;
+  }
+  function catalog(){const years=['全部',...new Set(papers.map(p=>String(p.year)))].sort((a,b)=>a==='全部'?-1:b==='全部'?1:Number(b)-Number(a));const filtered=papers.filter(p=>(year==='全部'||String(p.year)===year)&&(!search||`${p.title} ${p.sessionLabel} ${(p.topics?.translation||[]).join(' ')} ${(p.topics?.writing||[]).join(' ')}`.toLowerCase().includes(search.toLowerCase())));const sessions=[...new Set(filtered.map(p=>p.sessionId))];return `<section class="page-heading"><div><div class="eyebrow">PAST PAPERS / 2021–2026</div><h1>近五年真题，按考期练。</h1><p>选择考期和套卷，一边看原卷，一边完成听力、阅读答题与写译练习。</p></div><div class="heading-stamp">CET<span>6</span><small>PAST PAPERS</small></div></section><div class="paper-stats"><span><b>${papers.length}</b> 个套卷条目</span><span><b>${new Set(papers.map(p=>p.sessionId)).size}</b> 个考期</span><span><b>${papers.filter(p=>p.pdfUrl).length}</b> 份原卷 PDF</span><span>原来源核验 <b class="date">${esc(window.CET6_KEYS.updatedAt)}</b></span></div><div class="paper-intro"><p><b>时间范围：2021 年 12 月—2026 年 6 月。</b>包含期间查到的延期考期。原卷由公开来源直接提供，按来源套号区分；答案与听力按相应原卷核对。</p><p>听力与阅读支持自动判分、错题核对；成绩与作答保存在本机。看原卷和听原音需要联网。打开套卷可查看同考期备用真题。</p></div><div class="resource-tools"><label class="search-box"><span>⌕</span><input id="exam-search" type="search" aria-label="搜索真题" placeholder="搜索考期、套卷或话题" value="${esc(search)}"></label></div><div class="module-tabs">${years.map(y=>`<button class="chip ${year===y?'active':''}" data-action="exam-year" data-value="${y}">${y==='全部'?'全部考期':y+' 年'}</button>`).join('')}</div><div id="exam-catalog-results">${catalogRows(filtered,sessions)}</div><p class="small muted source-foot">更新核验以来源页面实际提供的材料为准；不把原创模拟题冒充真题，不宣称各来源套号一一对应。</p>`;}
   function catalogRows(filtered,sessions){if(!filtered.length)return '<div class="empty-state"><h3>没有匹配的套卷</h3><p>请更换关键词或年份。</p></div>';return sessions.map(sid=>{const group=filtered.filter(p=>p.sessionId===sid),first=group[0];return `<section class="exam-session"><div class="session-title"><div><span class="eyebrow">${esc(first.year)}</span><h2>${esc(first.sessionLabel)}</h2></div><span>${group.length} 份套卷</span></div><div class="exam-card-grid">${group.map(p=>`<article class="exam-card"><div class="exam-card-top"><span class="pill blue">真题 · ${esc(p.setLabel)}</span>${getSaved().paperWork?.[p.id]?.completed?'<span class="done-label">✓ 已练</span>':''}</div><h3>${esc(p.title)}</h3><div class="exam-badges"><span>${p.partial?'写译题页 + 共用卷':p.pdfUrl?'原卷 PDF':'在线题文'}</span><span>${p.audioPageUrl?'原音播放器':'无独立听力'}</span><span>听力 / 阅读自动判分</span></div>${p.topics?.translation?.length?`<p class="exam-topic">翻译话题：${esc(p.topics.translation.join(' / '))}</p>`:''}<p class="exam-provider">${esc(p.provider)}</p><button class="button primary" data-action="exam-open" data-id="${esc(p.id)}">打开套卷并练习 →</button></article>`).join('')}</div></section>`;}).join('');}
   function reader(){
-    const p=selected(),s=state(p.id),sharedListening=papers.find(x=>x.id===O.bank(p.id)?.sections?.listening?.sharedFrom),audioPaper=p.audioPageUrl?p:sharedListening,src=sectionSource||(audioView&&audioPaper?.audioPageUrl?audioPaper.audioPageUrl:p.previewUrl||p.htmlUrl||p.sourceUrl);
+    const p=selected(),s=state(p.id);
     return `<div class="paper-reader-heading"><button class="icon-button" data-action="exam-back">← 全部真题</button><span class="small muted">${esc(p.sessionLabel)} · ${esc(p.setLabel)}</span></div>
     <section class="page-heading reader-heading"><div><div class="eyebrow">REAL PAPER / ${esc(p.year)}</div><h1>${esc(p.title)}</h1><p>${esc(p.provider)} · 核验 ${esc(p.verifiedAt)}</p></div><button class="button ${s.completed?'secondary':'primary'}" data-action="exam-complete">${s.completed?'✓ 本套已练':'标记本套已练'}</button></section>
-    <div class="paper-source-bar"><div class="paper-source-actions"><button class="chip ${!audioView&&!showAnswers&&!sectionSource?'active':''}" data-action="exam-document" data-value="paper">整卷题文</button>${audioPaper?.audioPageUrl?`<button class="chip ${audioView?'active':''}" data-action="exam-document" data-value="audio">听力原音</button>`:''}<button class="chip ${showAnswers?'active':''}" data-action="exam-document" data-value="answer">参考解析</button>${link(src,'原页打开')}${link(p.pdfUrl,'下载题卷 PDF')}${link(p.sourceUrl,'出处','text-link')}</div><p>题目在下方直接载入来源网站；如果未显示，可点「原页打开」。套号与题序沿用此来源。</p></div>
     ${p.partial?'<div class="source-notice"><b>本套部分内容共用</b><p>这一份PDF仅含写作、翻译；听力与阅读采用来源明确标注的共用卷；答题区会注明对应出处。</p></div>':''}
-    <div class="real-study-grid"><section class="paper-document">${showAnswers?`<div class="answer-source-note"><b>参考答案与解析</b><p>原页提供题目与解析，请独立作答后再查看；机构参考译文、范文并非唯一答案。</p>${link(p.answerUrl,'下载参考答案 PDF')}${link(p.htmlUrl||p.sourceUrl,'原页查看解析')}</div>`:''}<iframe id="paper-frame" src="${esc(src)}" title="${esc(p.title)}${audioView?'听力原音':'原站题文与解析'}" referrerpolicy="no-referrer" loading="lazy"></iframe><div class="paper-reader-note"><b>资料说明</b><p>${esc(p.note)}</p><span>${esc(p.coverage)}</span>${p.sources?.length?`<details class="disclosure"><summary>其他来源与核对材料</summary>${p.sources.map(x=>`<p>${link(x.url,esc(x.title),'text-link')}<br>${esc(x.note||'')}</p>`).join('')}</details>`:''}</div></section>
-    <aside class="real-workspace"><section class="real-audio"><div class="eyebrow">ORIGINAL LISTENING</div><h3>本卷听力</h3>${audioPaper?.audioPageUrl?`<p>${sharedListening?'本部分与 '+esc(sharedListening.title)+' 共用听力。':'使用同来源播放器，避免套号与录音错配。'}</p><button class="button audio-view-button" data-action="exam-document" data-value="audio">在题目区打开原音 ▶</button>${link(audioPaper?.audioPageUrl,'单独打开播放器','text-link')}`:'<p>此来源没有为本套提供独立听力。请查看共用卷说明，或选择同考期第1/2套。</p>'}</section><div class="exam-work-tabs" role="group" aria-label="真题作答模块">${[['listening','听力'],['reading','阅读'],['translation','翻译'],['writing','作文'],['notes','笔记']].map(([v,n])=>`<button class="chip ${tab===v?'active':''}" data-action="exam-tab" data-value="${v}" aria-pressed="${tab===v}">${n}</button>`).join('')}</div><section class="exam-work-panel">${workPanel(p,s)}</section><p class="small muted real-save-note">作答仅保存在此浏览器，可在「我的复习」导出；网站公开不会公开你的草稿。</p></aside></div>`;
+    <div class="real-study-grid">${paperSources(p)}
+    <aside class="real-workspace">${listeningSource(p)}<div class="exam-work-tabs" role="group" aria-label="真题作答模块">${[['listening','听力'],['reading','阅读'],['translation','翻译'],['writing','作文'],['notes','笔记']].map(([v,n])=>`<button class="chip ${tab===v?'active':''}" data-action="exam-tab" data-value="${v}" aria-pressed="${tab===v}">${n}</button>`).join('')}</div><section class="exam-work-panel">${workPanel(p,s)}</section><p class="small muted real-save-note">作答仅保存在此浏览器，可在「我的复习」导出；网站公开不会公开你的草稿。</p></aside></div>`;
   }
   function resultPanel(p,s,mode){
     const result=O.cleanSubmission(p.id,mode,s.objectiveResults?.[mode]);
@@ -40,7 +84,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw})=>{
         const controls=group.options.length>4?`<label class="sr-only" for="exam-q-${number}">第 ${number} 题选项</label><select id="exam-q-${number}" data-action="exam-select" data-number="${number}"><option value="">请选择</option>${group.options.map(a=>`<option value="${a}" ${picked===a?'selected':''}>${a}</option>`).join('')}</select>`:group.options.map(a=>`<button class="${picked===a?'picked':''}" data-action="exam-answer" data-number="${number}" data-value="${a}" aria-label="第 ${number} 题选 ${a}" aria-pressed="${picked===a}">${a}</button>`).join('');
         return `<div class="exam-answer-row ${group.options.length>4?'letter-select':''} ${status}" role="group" aria-label="真题第 ${number} 题"><span>${String(number).padStart(2,'0')}</span>${controls}<button class="answer-clear" data-action="exam-clear" data-number="${number}" aria-label="清除第 ${number} 题答案" ${picked?'':'disabled'}>×</button>${row?`<small class="question-feedback">${status==='correct'?'✓ 正确':status==='ungraded'?'待核验，不计分':(status==='blank'?'未答':'✕ 错误')+' · 参考 '+row.answer}</small>`:''}</div>`;
       }).join('')}</div>${sources.length?`<details class="objective-source"><summary>答案出处 · ${esc(source.verifiedAt||O.bank(p.id)?.verifiedAt||'已核验')}</summary>${sources.map(x=>link(x.url,esc(x.title||'来源原页'),'text-link')).join('')}</details>`:''}</section>`;
-    }).join('')}<div class="objective-actions"><button class="button primary" data-action="exam-submit" ${graded.total?'':'disabled'}>提交${label}并判分</button><button class="button secondary" data-action="exam-retry" ${n?'':'disabled'}>开始重做</button></div>${undoDraft?.id===p.id&&undoDraft?.mode===mode?'<div class="objective-confirm">已清空本轮作答。<button class="button secondary" data-action="exam-undo-retry">撤销重做</button></div>':''}${pendingSubmit?`<div class="objective-confirm" role="status">还有 ${graded.blank} 道可判分题未答，将计入分母。<button class="button primary" data-action="exam-confirm-submit">仍然交卷</button><button class="button secondary" data-action="exam-cancel-submit">继续答题</button></div>`:''}${graded.ungraded?`<p class="small muted">${graded.ungraded} 道题因答案待核验或存在争议，仅保存作答，不纳入成绩。</p>`:''}<div class="note-box">作答后可在「参考解析」核对原卷依据，再把错因记入「笔记」。重做保留上次交卷成绩，重新提交后更新。</div>`;
+    }).join('')}<div class="objective-actions"><button class="button primary" data-action="exam-submit" ${graded.total?'':'disabled'}>提交${label}并判分</button><button class="button secondary" data-action="exam-retry" ${n?'':'disabled'}>开始重做</button></div>${undoDraft?.id===p.id&&undoDraft?.mode===mode?'<div class="objective-confirm">已清空本轮作答。<button class="button secondary" data-action="exam-undo-retry">撤销重做</button></div>':''}${pendingSubmit?`<div class="objective-confirm" role="status">还有 ${graded.blank} 道可判分题未答，将计入分母。<button class="button primary" data-action="exam-confirm-submit">仍然交卷</button><button class="button secondary" data-action="exam-cancel-submit">继续答题</button></div>`:''}${graded.ungraded?`<p class="small muted">${graded.ungraded} 道题因答案待核验或存在争议，仅保存作答，不纳入成绩。</p>`:''}<div class="note-box">作答后可在「原站题文、PDF 与解析」核对原卷依据，再把错因记入「笔记」。重做保留上次交卷成绩，重新提交后更新。</div>`;
   }
   function workPanel(p,s){if(['listening','reading'].includes(tab))return objectivePanel(p,s,tab);
     const label={translation:'我的真题译文',writing:'我的真题作文',notes:'本套复盘笔记'}[tab];return `<div class="section-title"><h3>${label}</h3><span>自动保存</span></div>${tab!=='notes'?`<p class="small muted">${tab==='writing'?'先读原卷作文题面，遵守给定首句等具体要求。建议 30 分钟、150–200 词。':'先阅读原卷的中文段落，再独立翻译。建议 30 分钟；参考译法不唯一。'}</p>`:''}<label class="sr-only" for="exam-draft">${label}</label><textarea id="exam-draft" data-field="${tab}" lang="${tab==='notes'?'zh-CN':'en'}" spellcheck="true" placeholder="${tab==='notes'?'记录题号、错因和下一次要注意的内容…':'Write your '+(tab==='writing'?'essay':'translation')+' here…'}">${esc(s[tab]||'')}</textarea><div class="editor-meta"><span id="exam-word-count">${words(s[tab]||'')} words</span><span>${tab==='notes'?'':'对照原卷任务要求自查'}</span></div>${tab==='writing'?'<div class="note-box">检查：任务是否完整回应？给定首句是否保留？每段是否有具体理由或例子？字数、语法与拼写是否合适？</div>':''}`;
@@ -58,11 +102,11 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw})=>{
   function handleClick(b){
     const a=b.dataset.action;if(!a?.startsWith('exam-'))return false;const p=selected();
     if(a==='exam-year'){year=b.dataset.value;redraw();}
-    else if(a==='exam-open'){if(!papers.some(p=>p.id===b.dataset.id))return true;selectedId=b.dataset.id;showAnswers=false;audioView=false;sectionSource=null;pendingSubmit=false;tab=initialTab(selected());redraw();window.scrollTo({top:0});}
+    else if(a==='exam-open'){if(!resume(b.dataset.id))return true;redraw();window.scrollTo({top:0});}
     else if(a==='exam-back'){selectedId=null;pendingSubmit=false;redraw();window.scrollTo({top:0});}
     else if(a==='exam-tab'){if(!['listening','reading','translation','writing','notes'].includes(b.dataset.value))return true;tab=b.dataset.value;pendingSubmit=false;document.querySelectorAll('[data-action="exam-tab"]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});refreshPanel();}
-    else if(a==='exam-shared'){const shared=papers.find(x=>x.id===b.dataset.id);if(shared){sectionSource=shared.htmlUrl||shared.sourceUrl;audioView=false;showAnswers=false;redraw();$('#paper-frame')?.scrollIntoView({block:'nearest'});}}
-    else if(a==='exam-document'){sectionSource=null;showAnswers=b.dataset.value==='answer';audioView=b.dataset.value==='audio';redraw();}
+    else if(a==='exam-shared'){const shared=papers.find(x=>x.id===b.dataset.id);if(shared){sectionSource=shared;documentView='original';redraw();$('#paper-frame')?.scrollIntoView({block:'nearest'});}}
+    else if(a==='exam-document'){documentView=b.dataset.value==='original'?'original':'sources';sectionSource=null;redraw();$('.paper-document summary')?.focus();}
     else if(a==='exam-answer')updateAnswer(b.dataset.number,b.dataset.value);
     else if(a==='exam-clear')updateAnswer(b.dataset.number,'');
     else if(a==='exam-submit'){const s=state(p.id);if(O.grade(p.id,tab,s[tab]).blank){pendingSubmit=true;refreshPanel();$('.objective-confirm')?.scrollIntoView({block:'nearest'});}else submit();}
@@ -77,7 +121,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw})=>{
   function handleInput(t){if(t.dataset.action==='exam-select'){updateAnswer(t.dataset.number,t.value);return true;}if(t.id==='exam-draft'){const s=state(selectedId);s[t.dataset.field]=t.value;s.updatedAt=new Date().toISOString();save(true);$('#exam-word-count').textContent=words(t.value)+' words';return true;}if(t.id==='exam-search'){search=t.value;const list=papers.filter(p=>(year==='全部'||String(p.year)===year)&&`${p.title} ${p.sessionLabel} ${(p.topics?.translation||[]).join(' ')} ${(p.topics?.writing||[]).join(' ')}`.toLowerCase().includes(search.toLowerCase()));$('#exam-catalog-results').innerHTML=catalogRows(list,[...new Set(list.map(p=>p.sessionId))]);return true;}return false;}
   function stop(){document.querySelector('#real-audio')?.pause();}
   function reviewHTML(){const entries=papers.filter(p=>getSaved().paperWork?.[p.id]);return `<section class="review-section"><div class="section-title"><h2>真题练习记录</h2><span>${entries.length} 份</span></div>${entries.length?entries.map(p=>{const s=state(p.id);return `<button class="saved-row" data-action="exam-resume" data-id="${esc(p.id)}"><span>${esc(p.title)}<small>${Object.keys(s.listening||{}).length}/25 听力 · ${Object.keys(s.reading||{}).length}/30 阅读${['listening','reading'].map(mode=>{const r=O.cleanSubmission(p.id,mode,s.objectiveResults?.[mode]);if(!r)return '';const g=O.grade(p.id,mode,r.answers);return ' · '+(mode==='reading'?'阅读':'听力')+' '+g.correct+'/'+g.total+' 正确'+(!O.same(p.id,mode,r.answers,s[mode])?'（待重交）':'');}).join('')} · 译文 ${words(s.translation||'')} 词 · 作文 ${words(s.writing||'')} 词${s.completed?' · 已练':''}</small></span><span>→</span></button>`;}).join(''):'<p class="muted empty-copy">打开一套真题开始练习，这里会保留你的进度。</p>'}</section>`;}
-  function resume(id){if(!papers.some(p=>p.id===id))return false;selectedId=id;showAnswers=false;audioView=false;sectionSource=null;pendingSubmit=false;tab=initialTab(selected());return true;}
+  function resume(id){if(!papers.some(p=>p.id===id))return false;selectedId=id;documentView='sources';sectionSource=null;pendingSubmit=false;tab=initialTab(selected());return true;}
   function mergeImport(raw,merged){
     if(!raw?.paperWork||typeof raw.paperWork!=='object'||Array.isArray(raw.paperWork))return;
     merged.paperWork??={};

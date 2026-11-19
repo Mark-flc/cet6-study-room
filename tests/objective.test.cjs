@@ -17,3 +17,27 @@ test('pending confirmation never follows resume to another paper; retry undo pre
 test('disputed question is stored but excluded from scoring and old scores recalculate',()=>{const {window:w}=setup(),o=w.CET6_OBJECTIVE,id='cet6-2026-06-3';const answers=Object.assign({},...o.sections(id,'reading').map(s=>s.answers));const oldSignature=o.signature(id,'reading').replace('-', 'D');const old=o.cleanSubmission(id,'reading',{answers,submittedAt:'2026-10-20T00:00:00Z',keyVersion:oldSignature});for(const choice of ['A','B','C','D','']){const input={...answers};if(choice)input[50]=choice;else delete input[50];const g=o.grade(id,'reading',input),q=g.rows.find(r=>r.number===50);assert.equal(q.status,'ungraded');assert.equal(q.answer,'');assert.equal(g.total,29);assert.equal(g.correct,29);assert.equal(g.blank,0);assert.equal(g.groups.find(x=>x.id==='careful').graded,9);if(choice)assert.equal(o.sanitize(id,'reading',input)[50],choice);}assert.notEqual(old.keyVersion,o.signature(id,'reading'));assert.equal(o.grade(id,'reading',old.answers).total,29);});
 
 test('second disputed question is excluded without affecting other papers',()=>{const {window:w}=setup(),o=w.CET6_OBJECTIVE,id='cet6-2023-12-2';const answers=Object.assign({},...o.sections(id,'reading').map(s=>s.answers));const g=o.grade(id,'reading',answers);assert.equal(g.total,29);assert.equal(g.correct,29);assert.equal(g.rows.find(r=>r.number===48).status,'ungraded');assert.equal(o.grade('cet6-2023-12-1','reading',{}).total,30);});
+
+test('source outage leaves a same-session backup and the original answer card available', () => {
+  const ctx = setup();
+  const {window: w} = ctx;
+  ctx.document = {querySelector: () => null};
+  const saved = {paperWork: {'cet6-2022-09-3': {listening: {1: 'B'}}}};
+  const mod = w.createExamsModule({getSaved: () => saved, save: () => {}, toast: () => {}, esc: String, redraw: () => {}});
+  for (const paper of w.CET6_PAPERS.papers) {
+    assert.ok(mod.resume(paper.id));
+    const html = mod.render();
+    const session = paper.sessionId.replace('-', '_');
+    assert.ok(html.includes(`https://www.guojiya.cn/exam/cet6_${session}_1`));
+    assert.ok(!html.includes('<iframe'));
+    assert.ok(html.includes('听力答题区'));
+  }
+  mod.resume('cet6-2022-09-3');
+  assert.ok(mod.render().includes('https://www.cettong.cn/library/cet6/2022_09_2-3'));
+  assert.ok(!mod.render().includes('https://www.guojiya.cn/exam/cet6_2022_09_2'));
+  mod.handleClick({dataset: {action: 'exam-shared', id: 'cet6-2022-09-1'}});
+  assert.ok(mod.render().includes('id="paper-frame" src="https://english-exam.lazynote.cn/cet6/paper/2022-09-1/"'));
+  mod.handleClick({dataset: {action: 'exam-document', value: 'sources'}});
+  assert.ok(!mod.render().includes('<iframe'));
+  assert.equal(saved.paperWork['cet6-2022-09-3'].listening[1], 'B');
+});
