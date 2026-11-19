@@ -3,7 +3,8 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const path=require('node:path');
-function setup(){const ctx={window:{},console};vm.createContext(ctx);for(const name of ['papers.js','answer-keys.js','objective.js','paired-papers.js','exams-ui.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),ctx);return ctx;}
+const {createHash, webcrypto}=require('node:crypto');
+function setup(){const ctx={window:{},console,URL,crypto:webcrypto};vm.createContext(ctx);for(const name of ['papers.js','answer-keys.js','objective.js','paired-papers.js','paired-files.js','exams-ui.js'])vm.runInContext(fs.readFileSync(path.join(__dirname,'..',name),'utf8'),ctx);return ctx;}
 const plain=x=>JSON.parse(JSON.stringify(x));
 test('all 36 source-matched papers have complete valid keys, including shared sections',()=>{const {window:w}=setup();let count=0;assert.equal(w.CET6_PAPERS.papers.length,36);for(const p of w.CET6_PAPERS.papers){for(const mode of ['listening','reading']){const parts=w.CET6_OBJECTIVE.sections(p.id,mode);for(const s of parts){assert.ok(s.verified,`${p.id} ${s.id}`);assert.ok(s.key.sources.length);if(s.key.sharedFrom)assert.deepEqual(plain(s.answers),plain(w.CET6_KEYS.papers[s.key.sharedFrom].sections[s.id].answers));}const answers=Object.assign({},...parts.map(s=>s.answers));const g=w.CET6_OBJECTIVE.grade(p.id,mode,answers);assert.equal(g.percent,100);assert.equal(g.total,mode==='listening'?25:(['cet6-2026-06-3','cet6-2023-12-2'].includes(p.id)?29:30));count+=g.total;}}assert.equal(count,1978);});
 test('wrong and missing answers remain in the denominator',()=>{const {window:w}=setup(),o=w.CET6_OBJECTIVE,id='cet6-2025-12-3';const g=o.grade(id,'reading',{26:'A',36:'R',46:'B',99:'A'});assert.equal(g.correct,1);assert.equal(g.wrong,2);assert.equal(g.blank,27);assert.equal(g.total,30);assert.equal(g.percent,3);});
@@ -55,7 +56,13 @@ test('each paired edition maps every question and option to its verified referen
           const [source, order] = pair.questions?.[n] || [n, group.options.join('')];
           assert.deepEqual([...order].sort(), [...group.options].sort(), `${id} Q${n}`);
           numbers.push(source);
-          expected[source] = order[group.options.indexOf(group.answers[n])];
+          const first = mode === 'reading' ? 26 : 1;
+          const sourceAnswer = pair.answers[source - first];
+          assert.ok(order.includes(sourceAnswer), `${id} Q${source} source key`);
+          if (!group.excluded.includes(n)) {
+            assert.equal(order[group.options.indexOf(group.answers[n])], pair.referenceCorrections?.[source] || sourceAnswer, `${id} Q${n}`);
+          }
+          expected[source] = sourceAnswer;
         }
         assert.deepEqual(numbers.sort((a, b) => a - b), Array.from(group.numbers));
       }
@@ -98,4 +105,70 @@ test('paired answers and results use displayed letters while saving the original
   mod.resume('cet6-2026-06-1');
   click('exam-document', 'paired');
   assert.doesNotMatch(mod.render(), /id="paired-paper-reader"/);
+  assert.match(mod.render(), /等待配套资料/);
+});
+
+test('June 2026 admits checked local PDF and audio only and keeps shared listening separate', async () => {
+  const ctx = setup(), {window: w} = ctx, id = 'cet6-2026-06-3';
+  ctx.document = {querySelector: () => null, querySelectorAll: () => []};
+  const testFiles = {
+    'june-pdf-1': new Blob(['fixture one'], {type: 'application/pdf'}),
+    'june-pdf-3': new Blob(['fixture three'], {type: 'application/pdf'}),
+    'june-audio-1': new Blob(['fixture audio one'], {type: 'audio/mp4'})
+  };
+  for (const [key, file] of Object.entries(testFiles)) {
+    w.CET6_PAIRED_FILES[key] = {
+      size: file.size,
+      sha256: createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex')
+    };
+  }
+  const saved = {};
+  const mod = w.createExamsModule({getSaved: () => saved, save: () => {}, toast: () => {}, esc: String, redraw: () => {}});
+  const click = (action, value, number) => mod.handleClick({dataset: {action, value, number}});
+  assert.ok(mod.resume(id));
+  click('exam-document', 'paired');
+  assert.match(mod.render(), /等待配套资料/);
+  await new Promise(resolve => setImmediate(resolve));
+  await mod.importLocalFiles([new Blob(['bad fixture']), testFiles['june-pdf-3']]);
+  assert.match(mod.render(), /1 个文件与配套版本不符/);
+  assert.doesNotMatch(mod.render(), /id="paired-paper-reader"/);
+  click('exam-tab', 'reading');
+  assert.match(mod.render(), /id="paired-paper-reader"[^>]*blob:/);
+  assert.match(mod.render(), /第 50 题参考答案有争议，暂不计分/);
+  click('exam-tab', 'listening');
+  await mod.importLocalFiles([testFiles['june-pdf-1'], testFiles['june-audio-1']]);
+  assert.match(mod.render(), /id="real-audio"[^>]*blob:/);
+  click('exam-answer', 'B', '1');
+  click('exam-confirm-submit');
+  assert.equal(w.CET6_OBJECTIVE.grade(id, 'listening', saved.paperWork[id].listening).correct, 1);
+});
+
+test('all 36 entries offer a verified pair for both modes, including split reading', () => {
+  const ctx = setup(), {window: w} = ctx;
+  ctx.document = {querySelector: () => null, querySelectorAll: () => []};
+  const saved = {};
+  const mod = w.createExamsModule({getSaved: () => saved, save: () => {}, toast: () => {}, esc: String, redraw: () => {}});
+  const click = (action, value) => mod.handleClick({dataset: {action, value}});
+  for (const paper of w.CET6_PAPERS.papers) {
+    assert.ok(mod.resume(paper.id));
+    for (const mode of ['listening', 'reading']) {
+      click('exam-tab', mode);
+      assert.match(mod.render(), /站内打开配套试卷/, `${paper.id} ${mode}`);
+      click('exam-document', 'paired');
+      const html = mod.render();
+      if (paper.year === 2026) {
+        assert.match(html, /id="paired-files"/);
+      } else {
+        assert.match(html, /id="paired-paper-reader"/, `${paper.id} ${mode}`);
+        if (mode === 'listening') assert.match(html, /id="real-audio"[^>]*listening\.mp3/);
+      }
+      click('exam-document', 'sources');
+    }
+  }
+  mod.resume('cet6-2021-12-3');
+  click('exam-tab', 'reading');
+  click('exam-document', 'paired');
+  assert.match(mod.render(), /2021_12_1\/test\.pdf" data-page="3"/);
+  click('exam-paired-part', '1');
+  assert.match(mod.render(), /2021_12_3\/test\.pdf" data-page="1"/);
 });

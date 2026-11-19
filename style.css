@@ -104,3 +104,8 @@ paired-pdf [hidden] {
   margin: 0 auto;
   background: var(--white);
 }
+
+.paired-file-picker{margin-top:14px;padding:12px 14px;background:var(--wash,#f1f5fb);border-radius:8px}
+.paired-file-picker label{display:block;font-weight:600;margin-bottom:6px}
+.paired-file-picker input{max-width:100%;font:inherit}
+.paired-file-picker p:empty{display:none}
