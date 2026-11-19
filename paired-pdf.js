@@ -94,6 +94,7 @@
       reader.visibility?.disconnect();
       reader.resize?.disconnect();
       cancelAnimationFrame(reader.frame);
+      reader.download?.abort();
       reader.render?.cancel();
       reader.loading?.destroy().catch(() => {});
     }
@@ -102,10 +103,23 @@
       try {
         const pdfjs = await pdfLibrary();
         if (this.reader !== reader) return;
+        reader.download = new AbortController();
+        const deadline = setTimeout(() => reader.download.abort(), 65000);
+        let data;
+        try {
+          const response = await fetch(reader.source.href, {
+            credentials: 'omit',
+            signal: reader.download.signal
+          });
+          if (!response.ok) throw new Error('PDF download failed');
+          data = await response.arrayBuffer();
+        } finally {
+          clearTimeout(deadline);
+        }
+        if (this.reader !== reader) return;
+        reader.status.textContent = '正在显示卷面…';
         reader.loading = pdfjs.getDocument({
-          url: reader.source.href,
-          disableStream: true,
-          disableAutoFetch: true,
+          data,
           isEvalSupported: false
         });
         reader.document = await reader.loading.promise;
