@@ -9,6 +9,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw,isActive=()=>true})=>{
   const selected=()=>papers.find(p=>p.id===selectedId);
   function link(url,label,cls='button secondary'){return url?`<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`:'';}
   const cettong='https://www.cettong.cn/library/cet6';
+  const cettongArchive='https://raw.githubusercontent.com/whoamiARC/cet-website/4f4341cd7340f15e5d2d8cb8ecd8643fa8a46cae/public/library/cet6';
   const localFiles=window.createPairedFiles?.(window.CET6_PAIRED_FILES||{});
   let localBusy=false, localRestored=false, localStatus='';
   function verifiedPair(p, mode){
@@ -26,7 +27,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw,isActive=()=>true})=>{
       return pdf&&(!pair.local.audio||audio)?{pdf,audio}:null;
     }
     const url=`${cettong}/${part.file}`;
-    return {pdf:`${url}/test.pdf`,audio:`${url}/listening.mp3`};
+    return {pdf:`${url}/test.pdf`,backupPdf:`${cettongArchive}/${part.file}/test.pdf`,audio:`${url}/listening.mp3`};
   }
   function activePair(p,mode=tab){
     const pair=documentView==='paired'&&verifiedPair(p,mode);
@@ -90,7 +91,8 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw,isActive=()=>true})=>{
   function paperSources(p){
     const pair=verifiedPair(p,tab), inline=activePair(p);
     const part=inline?.parts?.[pairedPart]||inline;
-    const pairedUrl=inline?pairedAssets(inline,part).pdf:'';
+    const assets=inline?pairedAssets(inline,part):null;
+    const pairedUrl=assets?.pdf||'';
     const localOpen=pair?.local&&documentView==='paired';
     const source=sectionSource||p;
     const url=source.previewUrl||source.htmlUrl||source.sourceUrl;
@@ -104,7 +106,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw,isActive=()=>true})=>{
             <button class="button ${documentView==='paired'?'secondary':'primary'}" data-action="exam-document" data-value="${documentView==='paired'?'sources':'paired'}">${documentView==='paired'?'收起配套试卷':'站内打开配套试卷'}</button>
             ${pair.local?link(pair.sourceUrl,pair.sourceLabel,'text-link'):link(`${cettong}/${part?.file||pair.file}`,'来源 · CET通','text-link')}
           </div>
-          ${localOpen?`<div class="paired-file-picker">
+          ${localOpen&&!inline?`<div class="paired-file-picker">
             <label for="paired-files">选择配套资料（可一次选多份）</label>
             <input id="paired-files" type="file" accept=".pdf,.mp3,.m4a" data-action="exam-local-files" multiple ${localBusy?'disabled':''}>
             <p>文件在此浏览器读取和保存。可一起选 3 份 PDF 和 2 份录音。这里按听力与阅读对应套号。</p>
@@ -116,7 +118,7 @@ window.createExamsModule=({getSaved,save,toast,esc,redraw,isActive=()=>true})=>{
         ${inline&&!inline.local?`<p class="small muted">卷面无法显示时可${link(`${pairedUrl}#page=${part.page}`,'单独打开 PDF','text-link')}。</p>`:''}
         ${inline?.note?`<p class="small muted">${esc(inline.note)}</p>`:''}
       </div>
-      ${inline?`<paired-pdf id="paired-paper-reader" data-src="${esc(pairedUrl)}" data-page="${part.page}" aria-label="${esc(p.title)}${tab==='listening'?'听力':'阅读'}配套卷面"></paired-pdf>`:''}
+      ${inline?`<paired-pdf id="paired-paper-reader" data-src="${esc(pairedUrl)}" data-page="${part.page}"${assets.backupPdf?` data-backup-src="${esc(assets.backupPdf)}"`:''} aria-label="${esc(p.title)}${tab==='listening'?'听力':'阅读'}配套卷面"></paired-pdf>`:''}
       <div class="paper-reader-note">
         <details class="disclosure"${pair?'':' open'}>
           <summary>同考期其他备用试卷</summary>
